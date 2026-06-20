@@ -43,6 +43,7 @@ const Settings: React.FC<SettingsProps> = ({ onLogoChange, theme: propTheme }) =
   const [webhookUrl, setWebhookUrl] = useState('')
   const [webhookPdfUrl, setWebhookPdfUrl] = useState('')
   const [webhookContentUrl, setWebhookContentUrl] = useState('')
+  const [webhookArticleUrl, setWebhookArticleUrl] = useState('')
 
   const [locked, setLocked] = useState(true)
 
@@ -85,6 +86,7 @@ const Settings: React.FC<SettingsProps> = ({ onLogoChange, theme: propTheme }) =
     if (cfg.webhook_url) setWebhookUrl(cfg.webhook_url)
     if (cfg.webhook_pdf_url) setWebhookPdfUrl(cfg.webhook_pdf_url)
     if (cfg.webhook_content_url) setWebhookContentUrl(cfg.webhook_content_url)
+    if (cfg.webhook_article_url) setWebhookArticleUrl(cfg.webhook_article_url)
     checkConnections()
   }
 
@@ -105,12 +107,15 @@ const Settings: React.FC<SettingsProps> = ({ onLogoChange, theme: propTheme }) =
     await Promise.all([
       AIConfigService.set('webhook_url', webhookUrl),
       AIConfigService.set('webhook_pdf_url', webhookPdfUrl),
-      AIConfigService.set('webhook_content_url', webhookContentUrl)
+      AIConfigService.set('webhook_content_url', webhookContentUrl),
+      AIConfigService.set('webhook_article_url', webhookArticleUrl),
     ])
     // Simpan override content webhook ke localStorage agar langsung dipakai n8nService
     try {
       if (webhookContentUrl) localStorage.setItem('n8n_content_url', webhookContentUrl.replace(/\/+$/, ''))
       else localStorage.removeItem('n8n_content_url')
+      if (webhookArticleUrl) localStorage.setItem('n8n_article_url', webhookArticleUrl.replace(/\/+$/, ''))
+      else localStorage.removeItem('n8n_article_url')
     } catch { /* ignore */ }
     setSaving(false)
     setSaved(true)
@@ -423,6 +428,15 @@ const Settings: React.FC<SettingsProps> = ({ onLogoChange, theme: propTheme }) =
                   value={webhookContentUrl}
                   onChange={e => setWebhookContentUrl(e.target.value)}
                   placeholder="https://your-n8n.com/webhook/generate-content"
+                  disabled={locked}
+                  style={{ ...inputStyle, fontFamily: T.mono, fontSize: 11, color: T.txt, marginBottom: 16 }}
+                />
+                <div style={{ fontSize: 10, fontWeight: 800, color: T.dim, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Webhook Artikel & Blog (WordPress)</div>
+                <input
+                  type="text"
+                  value={webhookArticleUrl}
+                  onChange={e => setWebhookArticleUrl(e.target.value)}
+                  placeholder="https://your-n8n.com/webhook/generate-article"
                   disabled={locked}
                   style={{ ...inputStyle, fontFamily: T.mono, fontSize: 11, color: T.txt, marginBottom: 16 }}
                 />
