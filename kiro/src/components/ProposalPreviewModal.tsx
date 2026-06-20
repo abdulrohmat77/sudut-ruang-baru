@@ -14,10 +14,13 @@ const ProposalPreviewModal: React.FC<Props> = ({ data, onClose, onSave, saving, 
   const html = useMemo(() => buildProposalHTML(data), [data])
 
   const handlePrint = () => {
-    const win = iframeRef.current?.contentWindow
+    // Buka di window baru supaya @page margin:0 efektif hilangkan browser header/footer
+    const win = window.open('', '_blank')
     if (win) {
-      win.focus()
-      win.print()
+      win.document.open()
+      win.document.write(html)
+      win.document.close()
+      setTimeout(() => win.print(), 300)
     }
   }
 

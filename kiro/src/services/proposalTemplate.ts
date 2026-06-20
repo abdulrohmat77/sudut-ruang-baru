@@ -381,7 +381,7 @@ export function buildProposalHTML(data: ProposalData): string {
   const termTotalPct = feeTerms.reduce((s, t) => s + (t.pct || 0), 0)
 
   const feeSection = `
-    <section class="page-break">
+    <section class="page-break page-break-fee">
       <div class="section-tag">BAB 14 · Fee Proposal</div>
       <h2>${esc(data.pricingTitle || 'Investasi desain yang menghasilkan nilai.')}</h2>
       <table class="rab-table">
@@ -396,19 +396,21 @@ export function buildProposalHTML(data: ProposalData): string {
         <tbody>${rows}</tbody>
       </table>
 
-      <div class="calculation-box">
-        <div class="calc-row"><span>Subtotal</span><span>${curLabel} ${formatMoney(cur, subtotal)}</span></div>
-        <div class="calc-row"><span>PPN (${Math.round((data.taxRate || 0) * 100)}%)</span><span>${curLabel} ${formatMoney(cur, tax)}</span></div>
-        <div class="calc-row total"><span>Total Investasi</span><span>${curLabel} ${formatMoney(cur, grandTotal)}</span></div>
-      </div>
+      <div style="break-inside:avoid; page-break-inside:avoid;">
+        <div class="calculation-box">
+          <div class="calc-row"><span>Subtotal</span><span>${curLabel} ${formatMoney(cur, subtotal)}</span></div>
+          <div class="calc-row"><span>PPN (${Math.round((data.taxRate || 0) * 100)}%)</span><span>${curLabel} ${formatMoney(cur, tax)}</span></div>
+          <div class="calc-row total"><span>Total Investasi</span><span>${curLabel} ${formatMoney(cur, grandTotal)}</span></div>
+        </div>
 
-      <h3 class="sub-h">Skema Pembayaran</h3>
-      <table class="term-table">
-        <thead><tr><th>Termin</th><th class="text-center">%</th><th>Trigger</th><th class="text-right">Nilai</th></tr></thead>
-        <tbody>${termRows}
-          <tr class="term-total"><td><strong>TOTAL</strong></td><td class="text-center"><strong>${termTotalPct}%</strong></td><td></td><td class="text-right"><strong>${curLabel} ${formatMoney(cur, grandTotal * (termTotalPct / 100))}</strong></td></tr>
-        </tbody>
-      </table>
+        <h3 class="sub-h">Skema Pembayaran</h3>
+        <table class="term-table">
+          <thead><tr><th>Termin</th><th class="text-center">%</th><th>Trigger</th><th class="text-right">Nilai</th></tr></thead>
+          <tbody>${termRows}
+            <tr class="term-total"><td><strong>TOTAL</strong></td><td class="text-center"><strong>${termTotalPct}%</strong></td><td></td><td class="text-right"><strong>${curLabel} ${formatMoney(cur, grandTotal * (termTotalPct / 100))}</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
 
       <div class="bank-box">
         <div class="bank-h">Rekening Pembayaran</div>
@@ -498,7 +500,7 @@ export function buildProposalHTML(data: ProposalData): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Proposal — ${esc(data.projectTitle)}</title>
+<title>Proposal ${esc(data.projectTitle)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -513,6 +515,7 @@ export function buildProposalHTML(data: ProposalData): string {
   }
   * { box-sizing: border-box; }
   body { font-family: 'Montserrat','Helvetica Neue',Helvetica,Arial,sans-serif; color: var(--text-dark); background:#eef2f7; margin:0; padding:40px 20px; display:flex; justify-content:center; }
+  .print-footer { display: none; }
   .proposal-paper { background:#fff; width:100%; max-width:900px; padding:60px; box-shadow:0 4px 20px rgba(4,54,102,0.08); border-radius:4px; position:relative; }
   .proposal-paper::before { content:""; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(90deg,#5EC2E4 0%,#4AB3D8 32%,#045D93 100%); border-radius:4px 4px 0 0; }
   header .confidential { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--text-muted); margin-bottom:30px; }
@@ -610,8 +613,10 @@ export function buildProposalHTML(data: ProposalData): string {
   footer { margin-top:40px; border-top:1px solid var(--line); padding-top:20px; font-size:12px; color:var(--text-muted); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; align-items:center; }
   footer .footer-tagline { width:100%; text-align:center; margin-top:8px; font-size:9px; letter-spacing:0.22em; color:var(--secondary-color); font-weight:700; }
   @media print {
-    @page { size: A4; margin: 10mm 12mm; }
+    @page { size: A4; margin: 12mm; }
     html, body { background:#fff !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    .proposal-paper { padding: 0; box-shadow: none; }
+    .print-footer { display: block; position: fixed; bottom: 0; left: 0; right: 0; padding: 4mm 14mm; font-size: 8px; color: var(--primary-color); display: flex; justify-content: space-between; }
     * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
     body { padding:0 !important; margin:0 !important; display:block !important; }
     .proposal-paper { box-shadow:none !important; padding:0 !important; max-width:none !important; width:auto !important; border-radius:0 !important; }
@@ -627,11 +632,13 @@ export function buildProposalHTML(data: ProposalData): string {
        nyaris kosong saat proposal datanya sedikit. Biarkan konten mengalir
        natural & mengisi halaman; pemotongan hanya dihindari pada blok kecil. */
     .page-break { break-before:auto !important; page-break-before:auto !important; }
+    .page-break-fee { break-before:page !important; page-break-before:always !important; }
     /* Hindari potong hanya pada blok kecil yang atomik. Tabel besar & section
        panjang dibiarkan mengalir natural antar halaman. */
     .kpi, .card, .qa, .pillar, .scope-col, .gallery-item, .color-swatch,
     .calculation-box, .bank-box, .why, .timeline-item { break-inside:avoid; page-break-inside:avoid; }
     tr, .term-total { break-inside:avoid; page-break-inside:avoid; }
+    table.rab-table, table.term-table { break-inside:avoid; page-break-inside:avoid; }
     thead { display:table-header-group; }
     h2, h3.sub-h, .section-tag { break-after:avoid; page-break-after:avoid; }
     img { max-width:100%; }
@@ -646,6 +653,7 @@ export function buildProposalHTML(data: ProposalData): string {
 </style>
 </head>
 <body>
+  <div class="print-footer"><span>sudutruang.com</span></div>
   <div class="proposal-paper" data-proposal-no="${esc(data.proposalNo)}">
     <header class="${data.coverImage ? 'cover-hero' : ''}"${coverStyle}>
       ${logoBlock}
@@ -674,8 +682,7 @@ export function buildProposalHTML(data: ProposalData): string {
     ${whySection}
     ${closingSection}
     <footer>
-      <div><strong>${esc(SRA.legal)}</strong>${data.company.locations ? ` • ${esc(data.company.locations)}` : ` • ${esc(SRA.city)}`}</div>
-      <div>Hubungi: ${esc(SRA.phones)}</div>
+      <div><strong>${esc(SRA.legal)}</strong> • sudutruang.com</div>
       <div class="footer-tagline">${esc(SRA.tagline2)}</div>
     </footer>
   </div>
