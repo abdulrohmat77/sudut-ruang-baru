@@ -151,7 +151,10 @@ const ArticleGenerator = () => {
         category,
         featured_image_url: imageUrl || d.image_url || null,
         platform: 'wordpress',
-        status: 'draft',
+        status: d.post_id || d.link ? 'published' : 'draft',
+        published_at: d.post_id || d.link ? new Date().toISOString() : null,
+        wp_post_id: d.post_id || null,
+        publish_result: d.link || null,
       })
       setTopic('')
       onPickFile(null)
@@ -307,6 +310,11 @@ const ArticleGenerator = () => {
                   <button onClick={() => setPreview(a)} title="Preview" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: `${T.sky}14`, color: T.sky, border: `1px solid ${T.sky}44`, borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
                     <ExternalLink size={12} /> Preview
                   </button>
+                  {a.status === 'published' && a.publish_result && (
+                    <a href={a.publish_result} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: `${T.green}14`, color: T.green, border: `1px solid ${T.green}44`, borderRadius: 7, textDecoration: 'none', fontSize: 11, fontWeight: 700 }}>
+                      <ExternalLink size={12} /> Buka di WP
+                    </a>
+                  )}
                   {a.status === 'draft' && (
                     <>
                       <button onClick={() => handlePublish(a)} title="Publish sekarang" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: `${T.green}14`, color: T.green, border: `1px solid ${T.green}44`, borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
