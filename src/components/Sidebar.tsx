@@ -36,6 +36,7 @@ interface MenuItem {
   icon: React.ReactNode
   label: string
   badgeKey?: 'chat'
+  children?: MenuItem[]
 }
 
 interface MenuSection {
@@ -71,7 +72,9 @@ const DEFAULT_SECTIONS: MenuSection[] = [
       { id: 'analytics', icon: <PieChart size={20} />, label: 'Analitik & KPI' },
       { id: 'automation', icon: <Activity size={20} />, label: 'Pusat Automasi' },
       { id: 'ai-studio', icon: <Bot size={20} />, label: 'AI Studio' },
-      { id: 'ai-content', icon: <Wand2 size={20} />, label: 'AI Content Engine' },
+      { id: 'ai-content', icon: <Wand2 size={20} />, label: 'AI Content Engine', children: [
+        { id: 'ai-articles', icon: <FileText size={16} />, label: 'Artikel & Blog' },
+      ] },
       { id: 'knowledge', icon: <BookOpen size={20} />, label: 'Knowledge AI' },
     ],
   },
@@ -301,6 +304,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </p>
                 {(editMode ? items : visibleItems).map((item) => {
                   const isActive = currentPage === item.id
+                  const hasActiveChild = item.children?.some((c) => currentPage === c.id)
+                  const showChildren = isActive || hasActiveChild
                   const badge = item.badgeKey === 'chat' ? chatBadge : 0
                   const isHidden = hidden.has(item.id)
                   return (
@@ -316,17 +321,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => editMode ? undefined : handleSelect(item.id)}
                         title={collapsed ? item.label : undefined}
                         className={`relative w-full flex items-center gap-sm px-md py-2.5 text-[13px] font-medium transition-colors ${collapsed ? 'md:justify-center md:px-0' : ''} ${
-                          !editMode && isActive ? 'bg-brand-accent/12' : 'hover:bg-black/5'
+                          !editMode && (isActive || hasActiveChild) ? 'bg-brand-accent/12' : 'hover:bg-black/5'
                         }`}
-                        style={{ color: !editMode && isActive ? (T.tint || T.sky) : T.sub, cursor: editMode ? 'grab' : 'pointer' }}
+                        style={{ color: !editMode && (isActive || hasActiveChild) ? (T.tint || T.sky) : T.sub, cursor: editMode ? 'grab' : 'pointer' }}
                       >
-                        {!editMode && isActive && (
+                        {!editMode && (isActive || hasActiveChild) && (
                           <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-brand-accent rounded-r" />
                         )}
                         {editMode && (
                           <span className={`flex-shrink-0 ${collapsed ? 'md:hidden' : ''}`} style={{ color: T.dim, cursor: 'grab', fontSize: 14 }}>⠿</span>
                         )}
-                        <div className="flex items-center justify-center relative" style={{ color: !editMode && isActive ? T.sky : T.sub }}>
+                        <div className="flex items-center justify-center relative" style={{ color: !editMode && (isActive || hasActiveChild) ? T.sky : T.sub }}>
                           {item.icon}
                           {badge > 0 && collapsed && !editMode && (
                             <span className="hidden md:block absolute -top-1 -right-1 w-2 h-2 rounded-full bg-brand-accent" />
@@ -349,6 +354,26 @@ const Sidebar: React.FC<SidebarProps> = ({
                           </span>
                         )}
                       </button>
+                      {/* Sub-menu children */}
+                      {!editMode && !collapsed && item.children && showChildren && (
+                        <div style={{ paddingLeft: 28 }}>
+                          {item.children.map((child) => {
+                            const childActive = currentPage === child.id
+                            return (
+                              <button
+                                key={child.id}
+                                onClick={() => handleSelect(child.id)}
+                                className={`relative w-full flex items-center gap-sm px-md py-2 text-[12px] font-medium transition-colors ${childActive ? 'bg-brand-accent/10' : 'hover:bg-black/5'}`}
+                                style={{ color: childActive ? T.sky : T.sub, cursor: 'pointer' }}
+                              >
+                                {childActive && <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-brand-accent rounded-r" />}
+                                <div className="flex items-center justify-center" style={{ color: childActive ? T.sky : T.sub }}>{child.icon}</div>
+                                <span className="truncate">{child.label}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

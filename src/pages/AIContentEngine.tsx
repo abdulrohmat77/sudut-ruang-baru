@@ -202,7 +202,7 @@ const AIContentEngine = () => {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: T.txt, margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
             <Wand2 size={22} color={T.sky} /> AI Content Engine
           </h1>
-          <div style={{ fontSize: 13, color: T.dim, marginTop: 4 }}>Upload gambar, AI buatkan caption + hashtags, lalu jadwalkan & autopost ke channel terpilih (IG / Facebook / WordPress) via n8n.</div>
+          <div style={{ fontSize: 13, color: T.dim, marginTop: 4 }}>Upload gambar, AI buatkan caption + hashtags, lalu jadwalkan & autopost ke Instagram / Facebook via n8n.</div>
         </div>
         <Btn v="ghost" size="sm" icon="RefreshCw" onClick={load}>Refresh</Btn>
       </div>
@@ -246,7 +246,7 @@ const AIContentEngine = () => {
             <div style={{ flex: '1 1 220px' }}>
               <label style={{ fontSize: 11, fontWeight: 700, color: T.dim, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Platform Tujuan</label>
               <div style={{ display: 'flex', gap: 6 }}>
-                {[['instagram', 'Instagram'], ['facebook', 'Facebook'], ['wordpress', 'WordPress']].map(([v, l]) => (
+                {[['instagram', 'Instagram'], ['facebook', 'Facebook']].map(([v, l]) => (
                   <button key={v} type="button" onClick={() => setPlatform(v)} style={{ flex: 1, padding: '9px 6px', borderRadius: 7, border: `1px solid ${platform === v ? T.sky : T.line}`, background: platform === v ? 'rgba(74,179,216,0.14)' : T.inset, color: platform === v ? T.sky : T.dim, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>{l}</button>
                 ))}
               </div>
@@ -262,7 +262,7 @@ const AIContentEngine = () => {
           </div>
           {err && <div style={{ fontSize: 12, color: T.red, lineHeight: 1.5 }}>{err}</div>}
           <div style={{ fontSize: 10.5, color: T.dim, lineHeight: 1.5 }}>
-            Autopost ke Instagram/Facebook (Meta Business) &amp; WordPress, serta penghematan token, diatur di workflow n8n (endpoint <span style={{ fontFamily: T.mono }}>/generate-content</span>) — set Webhook di Pengaturan → Integrasi. Caption &amp; gambar dibuat sekali lalu dipakai ulang untuk semua channel agar tidak boros token.
+            Autopost ke Instagram/Facebook (Meta Business), serta penghematan token, diatur di workflow n8n (endpoint <span style={{ fontFamily: T.mono }}>/generate-content</span>) — set Webhook di Pengaturan → Integrasi. Caption &amp; gambar dibuat sekali lalu dipakai ulang untuk semua channel agar tidak boros token.
           </div>
         </div>
       </Panel>
