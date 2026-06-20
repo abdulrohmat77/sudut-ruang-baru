@@ -8,17 +8,11 @@ import {
 import { DocumentService, ClientService, DBClient } from '../services/supabaseClient'
 import { openSpkPrintWindow, buildSpkDocumentHtml } from '../services/spkDocument'
 import {
-  getProposalPackage,
-  getProposalTermins,
-  proposalCats,
-  proposalTiers,
-  type ProposalMode,
-} from '../services/proposalPackages'
-import {
-  PRINCIPAL, SPK_TAHAPAN, SPK_EXCLUSIONS, SPK_GUARDRAILS, SPK_QA_CHECKLIST,
+  PRINCIPAL, SPK_GUARDRAILS, SPK_QA_CHECKLIST,
   SPK_JENIS_OPTIONS, SPK_KATEGORI_OPTIONS, buildTermins,
   generateSpkNumber, buildSpkNumber, terbilang, formatTanggalIndo, formatIDR,
-  type SpkJenis, type SpkKategori, type SpkTerminInput, type SpkPrefill, type InvoicePrefill,
+  spkCats, spkTiers, getScopeInc, getScopeExc, getTermins, getTahapan,
+  type SpkJenis, type SpkKategori, type SpkTerminInput, type SpkPrefill, type InvoicePrefill, type SpkMode,
 } from '../services/spkData'
 
 interface Props {
@@ -55,7 +49,7 @@ const Card: React.FC<{ refTag: string; title: string; children: React.ReactNode 
 )
 
 // Map kategori paket → SpkJenis enum untuk nomor & label SPK.
-function spkJenisFromPkg(mode: ProposalMode, cat: string): SpkJenis {
+function spkJenisFromPkg(mode: SpkMode, cat: string): SpkJenis {
   if (mode === 'db') return 'Design & Build'
   if (cat === 'Interior') return 'Perancangan Interior'
   if (cat === 'Landscape') return 'Perancangan Lanskap'
@@ -63,21 +57,13 @@ function spkJenisFromPkg(mode: ProposalMode, cat: string): SpkJenis {
 }
 
 // Tebak kategori paket dari prefill (atau default Arsitektur).
-function spkMapCat(mode: ProposalMode, raw?: string): string {
-  const cats = proposalCats(mode)
+function spkMapCat(mode: SpkMode, raw?: string): string {
+  const cats = spkCats(mode)
   if (raw && cats.includes(raw)) return raw
   const c = (raw || '').toLowerCase()
-  if (mode === 'plan') {
-    if (c.includes('interior')) return 'Interior'
-    if (c.includes('landscape') || c.includes('lanskap') || c.includes('taman')) return 'Landscape'
-    if (c.includes('renovasi')) return 'Renovasi'
-    return 'Arsitektur'
-  }
-  if (c.includes('cafe') || c.includes('komersial')) return 'Interior (Cafe/Komersial)'
-  if (c.includes('interior') || c.includes('kitchen') || c.includes('wardrobe')) return 'Interior (Residensial)'
-  if (c.includes('kolam') || c.includes('renang')) return 'Landscape (Kolam Renang)'
-  if (c.includes('villa')) return 'Landscape (Taman Villa)'
-  if (c.includes('landscape') || c.includes('lanskap') || c.includes('taman') || c.includes('garden')) return 'Landscape (Taman Rumah)'
+  if (c.includes('interior')) return 'Interior'
+  if (c.includes('landscape') || c.includes('lanskap') || c.includes('taman')) return 'Landscape'
+  if (mode === 'plan' && c.includes('renovasi')) return 'Renovasi'
   return 'Arsitektur'
 }
 
@@ -88,15 +74,16 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
   const [alertInfo, setAlertInfo] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Paket layanan (mode/kategori/tier) — sumber lingkup & termin.
-  const initMode: ProposalMode = prefill?.mode === 'db' ? 'db' : 'plan'
+  const initMode: SpkMode = prefill?.mode === 'db' ? 'db' : 'plan'
   const initCat = spkMapCat(initMode, prefill?.layCategory)
-  const initTier = proposalTiers(initMode).includes(prefill?.tier || '') ? (prefill!.tier as string) : 'Standar'
-  const initPkg = getProposalPackage(initMode, initCat, initTier)
-  const [pkgMode, setPkgMode] = useState<ProposalMode>(initMode)
+  const initTier = spkTiers(initMode, initCat).includes(prefill?.tier || '') ? (prefill!.tier as string) : 'Standar'
+  const initScopeInc = getScopeInc(initMode, initCat, initTier)
+  const initScopeExc = getScopeExc(initMode, initCat, initTier)
+  const [pkgMode, setPkgMode] = useState<SpkMode>(initMode)
   const [pkgCat, setPkgCat] = useState(initCat)
   const [pkgTier, setPkgTier] = useState(initTier)
-  const [scopeItems, setScopeItems] = useState<string[]>(initPkg.included)
-  const [excludeItems, setExcludeItems] = useState<string[]>(initPkg.excluded)
+  const [scopeItems, setScopeItems] = useState<string[]>(initScopeInc)
+  const [excludeItems, setExcludeItems] = useState<string[]>(initScopeExc)
   const [scopeEdited, setScopeEdited] = useState(false)
   const [terminEdited, setTerminEdited] = useState(false)
 
@@ -129,8 +116,6 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
   // Nomor urut + auto-format nomor SPK.
   const [spkSeq, setSpkSeq] = useState('5')
   const [autoNomor, setAutoNomor] = useState(true)
-  // #20 Lingkup pekerjaan sampai tahap ke- (mengikuti termin pembayaran).
-  const [scopeTahap, setScopeTahap] = useState(5)
   // Klien dari CRM (pilih, tidak ketik manual).
   const [crmClients, setCrmClients] = useState<DBClient[]>([])
   const [crmQuerySpk, setCrmQuerySpk] = useState('')
@@ -181,22 +166,22 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
 
   // Termin pembayaran fleksibel — default mengikuti paket (mode/kategori/tier).
   const [terminRows, setTerminRows] = useState<SpkTerminInput[]>(() =>
-    getProposalTermins(initMode, initCat, initTier).map((t) => ({ label: t.label, trigger: t.trigger, pct: t.pct, auto: false })))
+    getTermins(initMode, initCat, initTier).map((t) => ({ label: t.label, trigger: t.trigger, pct: t.pct, auto: false })))
 
   // Terapkan paket: set jenis + nomor SPK + lingkup + termin (kecuali sudah diedit manual).
-  const applyPkg = (m: ProposalMode, c: string, t: string) => {
+  const applyPkg = (m: SpkMode, c: string, t: string) => {
     setPkgMode(m); setPkgCat(c); setPkgTier(t)
     const jenis = spkJenisFromPkg(m, c)
     const d = contractDate ? new Date(contractDate + 'T00:00:00') : new Date()
     setVars((prev) => ({ ...prev, JENIS_PEKERJAAN: jenis, NO_SPK: autoNomor ? buildSpkNumber(spkSeq, jenis, d) : prev.NO_SPK }))
-    if (!scopeEdited) { const pkg = getProposalPackage(m, c, t); setScopeItems(pkg.included); setExcludeItems(pkg.excluded) }
-    if (!terminEdited) setTerminRows(getProposalTermins(m, c, t).map((x) => ({ label: x.label, trigger: x.trigger, pct: x.pct, auto: false })))
+    if (!scopeEdited) { setScopeItems(getScopeInc(m, c, t)); setExcludeItems(getScopeExc(m, c, t)) }
+    if (!terminEdited) setTerminRows(getTermins(m, c, t).map((x) => ({ label: x.label, trigger: x.trigger, pct: x.pct, auto: false })))
   }
-  const onPkgMode = (m: ProposalMode) => {
-    const cats = proposalCats(m); const tiers = proposalTiers(m)
+  const onPkgMode = (m: SpkMode) => {
+    const cats = spkCats(m); const tiers = spkTiers(m, pkgCat)
     applyPkg(m, cats.includes(pkgCat) ? pkgCat : cats[0], tiers.includes(pkgTier) ? pkgTier : tiers[0])
   }
-  const onPkgCat = (c: string) => applyPkg(pkgMode, c, pkgTier)
+  const onPkgCat = (c: string) => { const tiers = spkTiers(pkgMode, c); applyPkg(pkgMode, c, tiers.includes(pkgTier) ? pkgTier : tiers[0]) }
   const onPkgTier = (t: string) => applyPkg(pkgMode, pkgCat, t)
 
   const termins = useMemo(() => buildTermins(terminRows, vars.TOTAL_FEE), [terminRows, vars.TOTAL_FEE])
@@ -229,7 +214,7 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
       return prev.map((t, idx) => ({ ...t, auto: false, pct: base + (idx < rem ? 1 : 0) }))
     })
   }
-  const resetTermins = () => { setTerminEdited(false); setTerminRows(getProposalTermins(pkgMode, pkgCat, pkgTier).map((x) => ({ label: x.label, trigger: x.trigger, pct: x.pct, auto: false }))) }
+  const resetTermins = () => { setTerminEdited(false); setTerminRows(getTermins(pkgMode, pkgCat, pkgTier).map((x) => ({ label: x.label, trigger: x.trigger, pct: x.pct, auto: false }))) }
 
   // Persen manual yang sudah dipakai (di luar baris auto) — untuk info "sisa".
   const manualPct = useMemo(
@@ -239,7 +224,7 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
   const hasAuto = terminRows.some((r) => r.auto)
 
   // Dokumen live untuk preview — HTML yang SAMA dengan hasil cetak (embedded = tanpa toolbar).
-  const docHtml = useMemo(() => buildSpkDocumentHtml({ ...vars, scopeTahap, scopeItems, excludeItems }, termins, true), [vars, termins, scopeTahap, scopeItems, excludeItems])
+  const docHtml = useMemo(() => buildSpkDocumentHtml({ ...vars, scopeItems, excludeItems, pkgMode, pkgCat, pkgTier }, termins, true), [vars, termins, scopeItems, excludeItems, pkgMode, pkgCat, pkgTier])
 
   // Jaga posisi scroll preview saat dokumen di-render ulang.
   const previewRef = useRef<HTMLIFrameElement>(null)
@@ -275,7 +260,6 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
         ...vars,
         principal: PRINCIPAL,
         termins,
-        scopeTahap,
         scopeItems,
         excludeItems,
         pkgMode, pkgCat, pkgTier,
@@ -297,7 +281,7 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
   }
 
   const handleGeneratePdf = () => {
-    const ok = openSpkPrintWindow({ ...vars, scopeTahap, scopeItems, excludeItems }, termins)
+    const ok = openSpkPrintWindow({ ...vars, scopeItems, excludeItems, pkgMode, pkgCat, pkgTier }, termins)
     if (!ok) {
       setAlertInfo({ type: 'error', message: 'Popup diblokir browser. Izinkan popup untuk situs ini lalu coba lagi.' })
     }
@@ -317,7 +301,7 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
         </button>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: T.txt }}>SPK Generator</h1>
-          <p style={{ fontSize: 12, color: T.dim, margin: '2px 0 0' }}>9 pasal · termin fleksibel · SRA-KB-TPL-SPK v2.0</p>
+          <p style={{ fontSize: 12, color: T.dim, margin: '2px 0 0' }}>{pkgMode === 'db' ? '14 pasal · Design & Build' : '9 pasal · Jasa Perencanaan'} · termin fleksibel</p>
         </div>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: allGood ? T.green : T.amber, background: allGood ? `${T.green}18` : `${T.amber}18`, border: `1px solid ${allGood ? T.green : T.amber}40`, padding: '6px 12px', borderRadius: 99 }}>
           <ShieldCheck size={14} />{allGood ? 'Siap dikirim' : 'Belum lengkap'}
@@ -437,12 +421,12 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="Kategori" icon={<Building2 size={13} />}>
                   <select style={inputStyle} value={pkgCat} onChange={(e) => onPkgCat(e.target.value)}>
-                    {proposalCats(pkgMode).map((c) => <option key={c} value={c} style={{ background: T.panel }}>{c}</option>)}
+                    {spkCats(pkgMode).map((c) => <option key={c} value={c} style={{ background: T.panel }}>{c}</option>)}
                   </select>
                 </Field>
                 <Field label="Tier / Paket" icon={<BadgeCheck size={13} />}>
                   <div style={{ display: 'flex', gap: 6, background: T.inset, border: `1px solid ${T.line}`, borderRadius: 8, padding: 4 }}>
-                    {proposalTiers(pkgMode).map((o) => (
+                    {spkTiers(pkgMode, pkgCat).map((o) => (
                       <button key={o} type="button" onClick={() => onPkgTier(o)}
                         style={{ flex: 1, padding: '9px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 700, fontFamily: T.font, background: pkgTier === o ? T.sky : 'transparent', color: pkgTier === o ? '#03203a' : T.dim }}>{o}</button>
                     ))}
@@ -452,7 +436,7 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
               <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <span style={{ fontSize: 11, color: T.dim }}>Lingkup pekerjaan (Pasal 1.3) - auto dari paket, bisa diedit.</span>
                 {scopeEdited && (
-                  <button type="button" onClick={() => { setScopeEdited(false); const pkg = getProposalPackage(pkgMode, pkgCat, pkgTier); setScopeItems(pkg.included); setExcludeItems(pkg.excluded) }}
+                  <button type="button" onClick={() => { setScopeEdited(false); setScopeItems(getScopeInc(pkgMode, pkgCat, pkgTier)); setExcludeItems(getScopeExc(pkgMode, pkgCat, pkgTier)) }}
                     style={{ fontSize: 10.5, fontWeight: 700, color: T.dim, background: T.inset, border: `1px solid ${T.line}`, borderRadius: 7, padding: '5px 10px', cursor: 'pointer' }}>Reset paket</button>
                 )}
               </div>
@@ -596,32 +580,19 @@ const SpkBuilder = ({ onBack, prefill, onCreateInvoice }: Props) => {
               </div>
             </Card>
 
-            <Card refTag="§5" title="5 Tahap Pekerjaan (Pasal 1.5)">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: T.dim, lineHeight: 1.5, flex: 1, minWidth: 180 }}>Lingkup pekerjaan mengikuti pembayaran — atur sampai tahap berapa SPK ini berlaku.</span>
-                <select value={scopeTahap} onChange={(e) => setScopeTahap(Number(e.target.value))} style={{ ...inputStyle, width: 'auto', padding: '6px 10px' }}>
-                  {SPK_TAHAPAN.map((t) => <option key={t.no} value={t.no} style={{ background: T.panel }}>Sampai Tahap {t.no}</option>)}
-                </select>
+            <Card refTag="§5" title="Tahapan Pekerjaan (Pasal 1.5)">
+              <div style={{ fontSize: 11, color: T.dim, marginBottom: 12, lineHeight: 1.5 }}>
+                Tahapan otomatis mengikuti paket: <b style={{ color: T.sky }}>{pkgMode === 'db' ? 'Design & Build' : 'Jasa Perencanaan'}</b> · <b style={{ color: T.sky }}>{pkgCat}</b> · <b style={{ color: T.sky }}>{pkgTier}</b>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {SPK_TAHAPAN.map((t) => {
-                  const out = t.no > scopeTahap
-                  return (
-                  <div key={t.no} style={{ padding: 12, background: T.inset, border: `1px solid ${out ? T.line : T.sky + '44'}`, borderRadius: 8, opacity: out ? 0.45 : 1 }}>
+                {getTahapan(pkgMode, pkgCat, pkgTier).map((t, i) => (
+                  <div key={i} style={{ padding: 12, background: T.inset, border: `1px solid ${T.sky}44`, borderRadius: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontFamily: T.mono, fontSize: 10, color: T.sky }}>T{t.no}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: T.txt }}>{t.nama}</span>
-                      {out && <span style={{ fontSize: 9, color: T.dim, marginLeft: 'auto', fontWeight: 700 }}>DI LUAR LINGKUP</span>}
+                      <span style={{ fontFamily: T.mono, fontSize: 10, color: T.sky }}>T{i + 1}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: T.txt }}>{t.title}</span>
                     </div>
-                    <p style={{ fontSize: 11.5, color: T.dim, margin: 0, lineHeight: 1.5 }}>{t.deskripsi}</p>
+                    <p style={{ fontSize: 11.5, color: T.dim, margin: 0, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{t.detail}</p>
                   </div>
-                  )
-                })}
-              </div>
-              <div style={{ marginTop: 14, fontSize: 11, fontWeight: 700, color: T.dim, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Tidak termasuk pekerjaan PIHAK KEDUA</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {SPK_EXCLUSIONS.map((x) => (
-                  <span key={x} style={{ fontSize: 11, color: T.sub, background: T.inset, border: `1px solid ${T.line}`, padding: '3px 9px', borderRadius: 99 }}>{x}</span>
                 ))}
               </div>
             </Card>

@@ -35,7 +35,7 @@ function ContentImage({ url }: { url: string | null }) {
   const src = url ? (bust ? `${url}${url.includes('?') ? '&' : '?'}_r=${bust}` : url) : ''
 
   return (
-    <div style={{ aspectRatio: '1/1', background: T.inset, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ aspectRatio: '4/3', background: T.inset, position: 'relative', overflow: 'hidden', maxHeight: 160 }}>
       {url && (
         <img
           ref={imgRef}
@@ -278,7 +278,7 @@ const AIContentEngine = () => {
           </div>
         </Panel>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
           {contents.map((c) => {
             const st = STATUS[c.status] || STATUS.draft
             return (
@@ -289,7 +289,7 @@ const AIContentEngine = () => {
                   <span style={{ position: 'absolute', top: 10, left: 10, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', padding: '3px 9px', borderRadius: 999, background: `${st.color}dd`, color: '#fff', zIndex: 2 }}>{st.label}</span>
                 </div>
                 {/* Body */}
-                <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
                   {c.topic && <div style={{ fontSize: 10, color: T.dim, textTransform: 'uppercase', letterSpacing: 0.5 }}>{c.topic}</div>}
                   <div style={{ fontSize: 12.5, color: T.txt, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.caption || '—'}</div>
                   {c.hashtags && <div style={{ fontSize: 11, color: T.sky, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.hashtags}</div>}
