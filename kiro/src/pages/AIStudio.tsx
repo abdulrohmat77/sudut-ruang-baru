@@ -1,0 +1,529 @@
+import React, { useState, useEffect } from 'react'
+import {
+  TemplateService,
+  QuickReplyService,
+  AIConfigService,
+  DocumentService,
+  DBTemplate,
+  DBQuickReply,
+  DBDocument,
+} from '../services/supabaseClient'
+import PinLock from '../components/PinLock'
+
+type Tab = 'templates' | 'quick-replies' | 'config' | 'documents'
+
+// Keys that hold secrets / branding blobs / lock state — never expose in the
+// editable config list.
+const SENSITIVE_CONFIG_KEYS = [
+  'settings_pin',
+  'dashboard_password_hash',
+  'dashboard_email',
+  'company_logo',
+]
+
+const AIStudio: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<Tab>('templates')
+  const [templates, setTemplates] = useState<DBTemplate[]>([])
+  const [quickReplies, setQuickReplies] = useState<DBQuickReply[]>([])
+  const [aiConfig, setAiConfig] = useState<Record<string, string>>({})
+  const [documents, setDocuments] = useState<DBDocument[]>([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  // Template form
+  const [editingTemplate, setEditingTemplate] = useState<Partial<DBTemplate> | null>(null)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+
+  // Quick reply form
+  const [editingQR, setEditingQR] = useState<Partial<DBQuickReply> | null>(null)
+  const [savingQR, setSavingQR] = useState(false)
+
+  // AI Config tab lock
+  const [configLocked, setConfigLocked] = useState(true)
+
+  useEffect(() => {
+    loadAll()
+  }, [])
+
+  const loadAll = async () => {
+    const [t, qr, cfg] = await Promise.all([
+      TemplateService.getAll(),
+      QuickReplyService.getAll(),
+      AIConfigService.getAll(),
+    ])
+    setTemplates(t)
+    setQuickReplies(qr)
+    setAiConfig(cfg)
+    setLoading(false)
+  }
+
+  const loadDocuments = async () => {
+    setLoadingDocs(true)
+    const docs = await DocumentService.getAll()
+    setDocuments(docs)
+    setLoadingDocs(false)
+  }
+
+  useEffect(() => {
+    if (activeTab === 'documents') {
+      loadDocuments()
+    }
+  }, [activeTab])
+
+  const saveTemplate = async () => {
+    if (!editingTemplate?.type || !editingTemplate?.name || !editingTemplate?.content) return
+    setSavingTemplate(true)
+    await TemplateService.upsert({
+      id: editingTemplate.id,
+      type: editingTemplate.type!,
+      name: editingTemplate.name!,
+      content: editingTemplate.content!,
+      variables: editingTemplate.variables || [],
+      is_active: true,
+    })
+    await loadAll()
+    setEditingTemplate(null)
+    setSavingTemplate(false)
+  }
+
+  const deleteTemplate = async (id: string) => {
+    await TemplateService.delete(id)
+    setTemplates((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  const saveQR = async () => {
+    if (!editingQR?.title || !editingQR?.content) return
+    setSavingQR(true)
+    await QuickReplyService.upsert({
+      id: editingQR.id,
+      title: editingQR.title!,
+      content: editingQR.content!,
+      category: editingQR.category || 'general',
+      is_active: true,
+    })
+    await loadAll()
+    setEditingQR(null)
+    setSavingQR(false)
+  }
+
+  const deleteQR = async (id: string) => {
+    await QuickReplyService.delete(id)
+    setQuickReplies((prev) => prev.filter((q) => q.id !== id))
+  }
+
+  const saveConfig = async (key: string, value: string) => {
+    await AIConfigService.set(key, value)
+    setAiConfig((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const tabs: Array<{ id: Tab; icon: string; label: string }> = [
+    { id: 'templates', icon: 'description', label: 'Templates' },
+    { id: 'quick-replies', icon: 'bolt', label: 'Quick Replies' },
+    { id: 'config', icon: 'tune', label: 'AI Config' },
+    { id: 'documents', icon: 'folder', label: 'Documents' },
+  ]
+
+  const templateTypeColors: Record<string, string> = {
+    greeting: 'bg-emerald-100 text-emerald-700',
+    estimasi: 'bg-blue-100 text-blue-700',
+    proposal_request: 'bg-purple-100 text-purple-700',
+    followup: 'bg-orange-100 text-orange-700',
+    invoice: 'bg-yellow-100 text-yellow-700',
+  }
+
+  return (
+    <div className="p-sm md:p-gutter max-w-container-max mx-auto space-y-md">
+      <div>
+        <h1 className="font-serif-display text-display-lg text-on-background">AI Studio</h1>
+        <p className="text-body-md text-on-surface-variant">
+          Kelola templates, quick replies, dan konfigurasi AI
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-surface-container rounded-xl p-1 overflow-x-auto no-scrollbar">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 min-w-[80px] flex items-center justify-center gap-xs py-2 px-sm rounded-lg text-body-md font-bold transition-all whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'bg-white shadow-sm text-primary'
+                : 'text-on-surface-variant hover:text-on-background'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-32 bg-surface-container rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* TEMPLATES */}
+          {activeTab === 'templates' && (
+            <div className="space-y-md">
+              <div className="flex items-center justify-between">
+                <p className="text-body-md text-on-surface-variant">
+                  Template pesan yang digunakan AI untuk auto-reply
+                </p>
+                <button
+                  onClick={() => setEditingTemplate({ type: 'greeting', is_active: true })}
+                  className="flex items-center gap-xs py-2 px-md bg-primary text-on-primary rounded-lg font-bold hover:opacity-90 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add</span>
+                  Template Baru
+                </button>
+              </div>
+
+              {/* Edit Form */}
+              {editingTemplate !== null && (
+                <div className="bg-surface-container-lowest border-2 border-primary rounded-xl p-md">
+                  <h3 className="font-headline-sm font-bold mb-md">
+                    {editingTemplate.id ? 'Edit Template' : 'Template Baru'}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-sm mb-sm">
+                    <div>
+                      <label className="text-label-caps text-on-surface-variant uppercase block mb-2">Tipe</label>
+                      <select
+                        value={editingTemplate.type || ''}
+                        onChange={(e) => setEditingTemplate({ ...editingTemplate, type: e.target.value })}
+                        className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md text-on-surface focus:ring-2 focus:ring-secondary outline-none"
+                      >
+                        {['greeting', 'estimasi', 'proposal_request', 'followup', 'invoice', 'rab'].map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-label-caps text-on-surface-variant uppercase block mb-2">Nama</label>
+                      <input
+                        type="text"
+                        value={editingTemplate.name || ''}
+                        onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+                        placeholder="Nama template"
+                        className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md text-on-surface focus:ring-2 focus:ring-secondary outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="mb-sm">
+                    <label className="text-label-caps text-on-surface-variant uppercase block mb-2">
+                      Content — gunakan {'{variable}'} untuk variabel dinamis
+                    </label>
+                    <textarea
+                      rows={8}
+                      value={editingTemplate.content || ''}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, content: e.target.value })}
+                      placeholder="Isi template... gunakan {client_name}, {building_type}, dll"
+                      className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md text-on-surface focus:ring-2 focus:ring-secondary outline-none resize-none font-mono-label"
+                    />
+                  </div>
+                  <div className="flex gap-sm">
+                    <button
+                      onClick={saveTemplate}
+                      disabled={savingTemplate}
+                      className="flex items-center gap-xs py-2 px-md bg-primary text-on-primary rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">save</span>
+                      {savingTemplate ? 'Menyimpan...' : 'Simpan'}
+                    </button>
+                    <button
+                      onClick={() => setEditingTemplate(null)}
+                      className="py-2 px-md border border-outline-variant rounded-lg font-bold hover:bg-surface-container"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
+                {templates.map((t) => (
+                  <div key={t.id} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                    <div className="flex items-start justify-between mb-sm">
+                      <div>
+                        <span className={`text-label-caps px-2 py-0.5 rounded-full font-bold uppercase text-[10px] ${
+                          templateTypeColors[t.type] || 'bg-surface-container text-on-surface-variant'
+                        }`}>
+                          {t.type}
+                        </span>
+                        <h3 className="font-bold text-on-background mt-1">{t.name}</h3>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setEditingTemplate(t)}
+                          className="p-1.5 hover:bg-surface-container rounded-lg transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[18px] text-on-surface-variant">edit</span>
+                        </button>
+                        <button
+                          onClick={() => deleteTemplate(t.id)}
+                          className="p-1.5 hover:bg-error-container rounded-lg transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[18px] text-on-surface-variant">delete</span>
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-body-md text-on-surface-variant line-clamp-3 font-mono-label text-[12px] bg-surface-container rounded-lg p-sm">
+                      {t.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* QUICK REPLIES */}
+          {activeTab === 'quick-replies' && (
+            <div className="space-y-md">
+              <div className="flex items-center justify-between">
+                <p className="text-body-md text-on-surface-variant">
+                  Balasan cepat untuk dipakai saat manual mode
+                </p>
+                <button
+                  onClick={() => setEditingQR({ category: 'general' })}
+                  className="flex items-center gap-xs py-2 px-md bg-primary text-on-primary rounded-lg font-bold hover:opacity-90"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add</span>
+                  Quick Reply Baru
+                </button>
+              </div>
+
+              {editingQR !== null && (
+                <div className="bg-surface-container-lowest border-2 border-primary rounded-xl p-md">
+                  <h3 className="font-headline-sm font-bold mb-md">
+                    {editingQR.id ? 'Edit Quick Reply' : 'Quick Reply Baru'}
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-sm mb-sm">
+                    <div>
+                      <label className="text-label-caps text-on-surface-variant uppercase block mb-2">Judul</label>
+                      <input
+                        type="text"
+                        value={editingQR.title || ''}
+                        onChange={(e) => setEditingQR({ ...editingQR, title: e.target.value })}
+                        placeholder="Nama singkat"
+                        className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md text-on-surface focus:ring-2 focus:ring-secondary outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-label-caps text-on-surface-variant uppercase block mb-2">Kategori</label>
+                      <select
+                        value={editingQR.category || 'general'}
+                        onChange={(e) => setEditingQR({ ...editingQR, category: e.target.value })}
+                        className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md text-on-surface focus:ring-2 focus:ring-secondary outline-none"
+                      >
+                        {['greeting', 'pricing', 'timeline', 'closing', 'general'].map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mb-sm">
+                    <label className="text-label-caps text-on-surface-variant uppercase block mb-2">Isi Pesan</label>
+                    <textarea
+                      rows={4}
+                      value={editingQR.content || ''}
+                      onChange={(e) => setEditingQR({ ...editingQR, content: e.target.value })}
+                      placeholder="Isi pesan quick reply..."
+                      className="w-full px-md py-3 bg-surface-container-low border-none rounded-lg text-body-md text-on-surface focus:ring-2 focus:ring-secondary outline-none resize-none"
+                    />
+                  </div>
+                  <div className="flex gap-sm">
+                    <button
+                      onClick={saveQR}
+                      disabled={savingQR}
+                      className="flex items-center gap-xs py-2 px-md bg-primary text-on-primary rounded-lg font-bold hover:opacity-90 disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">save</span>
+                      {savingQR ? 'Menyimpan...' : 'Simpan'}
+                    </button>
+                    <button
+                      onClick={() => setEditingQR(null)}
+                      className="py-2 px-md border border-outline-variant rounded-lg font-bold hover:bg-surface-container"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+                {quickReplies.map((qr) => (
+                  <div key={qr.id} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                    <div className="flex items-start justify-between mb-sm">
+                      <div>
+                        <span className="text-label-caps text-on-surface-variant uppercase text-[10px]">{qr.category}</span>
+                        <h3 className="font-bold text-on-background">{qr.title}</h3>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => setEditingQR(qr)} className="p-1.5 hover:bg-surface-container rounded-lg">
+                          <span className="material-symbols-outlined text-[18px] text-on-surface-variant">edit</span>
+                        </button>
+                        <button onClick={() => deleteQR(qr.id)} className="p-1.5 hover:bg-error-container rounded-lg">
+                          <span className="material-symbols-outlined text-[18px] text-on-surface-variant">delete</span>
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-body-md text-on-surface-variant line-clamp-3">{qr.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AI CONFIG */}
+          {activeTab === 'config' && (
+            <div className="space-y-md">
+              <div className="flex items-start gap-xs bg-amber-soft border border-amber/30 rounded-xl p-sm">
+                <span className="material-symbols-outlined text-amber text-[20px]">warning</span>
+                <p className="text-[12.5px] text-on-surface-variant">
+                  Mengubah konfigurasi ini bisa memengaruhi perilaku AI & integrasi. Buka kunci
+                  dengan PIN sebelum mengedit.
+                </p>
+              </div>
+
+              <PinLock
+                locked={configLocked}
+                onChange={setConfigLocked}
+                lockedTitle="AI Config terkunci"
+                lockedDesc="Konfigurasi ini mengatur perilaku AI & integrasi (webhook n8n, model, dll). Dikunci agar tidak berubah tidak sengaja — buka kunci dengan PIN hanya bila perlu mengedit."
+              />
+
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-md ${configLocked ? 'opacity-70' : ''}`}>
+                {Object.entries(aiConfig)
+                  .filter(([key]) => !SENSITIVE_CONFIG_KEYS.includes(key))
+                  .map(([key, value]) => (
+                  <div key={key} className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                    <label className="text-label-caps text-on-surface-variant uppercase block mb-2">{key.replace(/_/g, ' ')}</label>
+                    <div className="flex gap-sm">
+                      <input
+                        type="text"
+                        defaultValue={value}
+                        disabled={configLocked}
+                        onBlur={(e) => {
+                          if (!configLocked && e.target.value !== value) {
+                            saveConfig(key, e.target.value)
+                          }
+                        }}
+                        className="flex-1 px-md py-3 bg-surface-container-low border border-outline-variant rounded-lg text-body-md text-on-surface focus:ring-2 focus:ring-brand-accent outline-none disabled:opacity-60 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <p className="text-label-caps text-on-surface-variant mt-1">Current: {value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* DOCUMENTS */}
+          {activeTab === 'documents' && (
+            <div className="space-y-md">
+              <div className="flex items-center justify-between">
+                <p className="text-body-md text-on-surface-variant">
+                  Semua dokumen yang telah di-generate (proposal, invoice, RAB)
+                </p>
+                <button
+                  onClick={loadDocuments}
+                  className="flex items-center gap-xs py-2 px-md border border-outline-variant rounded-lg font-bold hover:bg-surface-container transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">refresh</span>
+                  Refresh
+                </button>
+              </div>
+
+              {loadingDocs ? (
+                <div className="space-y-sm">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-16 bg-surface-container rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                  <div className="text-center py-xl text-on-surface-variant">
+                    <span className="material-symbols-outlined text-5xl">folder_open</span>
+                    <p className="text-body-md mt-2">Belum ada dokumen</p>
+                    <p className="text-label-caps mt-1">
+                      Setelah WA terhubung dan client minta proposal, dokumen akan tersimpan otomatis
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-sm">
+                  {documents.map((doc) => {
+                    const typeIcon: Record<string, string> = {
+                      proposal: 'description',
+                      invoice: 'receipt',
+                      rab: 'calculate',
+                      followup: 'forward_to_inbox',
+                    }
+                    const statusColor: Record<string, string> = {
+                      draft: 'bg-surface-container text-on-surface-variant',
+                      sent: 'bg-secondary-container text-on-secondary-container',
+                      viewed: 'bg-blue-100 text-blue-700',
+                      accepted: 'bg-emerald-100 text-emerald-700',
+                      rejected: 'bg-error-container text-on-error-container',
+                    }
+                    return (
+                      <div
+                        key={doc.id}
+                        className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex items-center gap-md"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0">
+                          <span className="material-symbols-outlined text-primary">
+                            {typeIcon[doc.type] || 'description'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-sm">
+                            <span className="font-bold text-on-background capitalize">{doc.type}</span>
+                            {doc.proposal_no && (
+                              <span className="text-label-caps text-on-surface-variant">#{doc.proposal_no}</span>
+                            )}
+                          </div>
+                          <p className="text-body-md text-on-surface-variant truncate">
+                            {doc.client_name || doc.client_phone || '—'}
+                          </p>
+                          <p className="text-label-caps text-on-surface-variant">
+                            {new Date(doc.created_at).toLocaleString('id-ID', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-sm flex-shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-label-caps font-bold text-[10px] uppercase ${
+                            statusColor[doc.status] || 'bg-surface-container text-on-surface-variant'
+                          }`}>
+                            {doc.status}
+                          </span>
+                          {doc.file_url && (
+                            <a
+                              href={doc.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 hover:bg-surface-container rounded-lg transition-colors"
+                            >
+                              <span className="material-symbols-outlined text-[18px] text-primary">download</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+export default AIStudio

@@ -1,7 +1,0 @@
-node_modules/
-dist/
-.env
-.thumbnail
-*.lock
-bun.lock
-package-lock.json
