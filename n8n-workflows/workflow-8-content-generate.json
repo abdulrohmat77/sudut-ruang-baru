@@ -1,0 +1,155 @@
+{
+  "name": "WF-8 · AI Content Generate (Gemini caption + Gemini image → Supabase Storage)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-content",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "wh-generate",
+      "name": "Webhook /generate-content",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-700, 0],
+      "webhookId": "c69fe8b9-9654-4ed5-998c-b57dc1db1b12"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nreturn [{ json: {\n  topic: body.topic || '',\n  tone: body.tone || 'Profesional & inspiratif',\n  platform: body.platform || 'instagram'\n} }];"
+      },
+      "id": "build-input",
+      "name": "Build Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-500, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"system_instruction\": { \"parts\": [{ \"text\": \"Kamu social media manager studio arsitektur Sudut Ruang Arsitek (Surabaya). Buat 1 konten Instagram dari topik user. Output WAJIB JSON VALID tanpa markdown, field persis: caption (3-5 kalimat, ada hook di awal + CTA di akhir, bahasa Indonesia), hashtags (8-12 hashtag relevan dipisah spasi, masing-masing diawali #), image_prompt (prompt BAHASA INGGRIS untuk generate gambar, gaya fotografi arsitektur profesional, deskriptif, tanpa teks pada gambar). Jangan menambah field lain.\" }] },\n  \"contents\": [{ \"role\": \"user\", \"parts\": [{ \"text\": \"Topik: {{ $json.topic }}\\nTone: {{ $json.tone }}\\nPlatform: {{ $json.platform }}\" }] }],\n  \"generationConfig\": { \"temperature\": 0.7, \"responseMimeType\": \"application/json\" }\n}",
+        "options": {}
+      },
+      "id": "gemini-caption",
+      "name": "Gemini — Caption & Prompt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-300, 0],
+      "credentials": {
+        "httpHeaderAuth": { "id": "Pv00mUTpcvDRJEe0", "name": "gemini" }
+      },
+      "notes": "Header Auth → Name: x-goog-api-key, Value: <GEMINI_API_KEY>."
+    },
+    {
+      "parameters": {
+        "jsCode": "let out = {};\ntry { out = JSON.parse($json.candidates[0].content.parts[0].text); }\ncatch (e) { out = { caption: 'Gagal parse output AI', hashtags: '', image_prompt: 'modern tropical architecture, professional photography' }; }\nconst seed = Math.floor(Math.random() * 1000000);\nreturn [{ json: {\n  caption: out.caption || '',\n  hashtags: out.hashtags || '',\n  image_prompt: out.image_prompt || 'modern tropical architecture, professional photography',\n  filename: `content-${Date.now()}-${seed}.png`\n} }];"
+      },
+      "id": "parse",
+      "name": "Parse Caption",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-100, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [{ \"parts\": [{ \"text\": \"High-quality professional architectural photography for Instagram, 1:1 square, no text, no watermark. {{ $json.image_prompt }}\" }] }],\n  \"generationConfig\": { \"responseModalities\": [\"TEXT\", \"IMAGE\"] }\n}",
+        "options": {}
+      },
+      "id": "gemini-image",
+      "name": "Gemini — Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [100, 0],
+      "credentials": {
+        "httpHeaderAuth": { "id": "Pv00mUTpcvDRJEe0", "name": "gemini" }
+      },
+      "notes": "Gemini image generation. Hasil: candidates[0].content.parts[].inlineData.data (base64 PNG). Pakai API key Gemini yang sama."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ambil base64 gambar dari Gemini, ubah jadi binary untuk diupload ke Supabase.\nconst parts = $json.candidates?.[0]?.content?.parts || [];\nconst imgPart = parts.find(p => p.inlineData || p.inline_data);\nconst inline = imgPart && (imgPart.inlineData || imgPart.inline_data);\nif (!inline || !inline.data) {\n  throw new Error('Gemini tidak mengembalikan gambar. Cek model image generation / kuota API.');\n}\nconst p = $('Parse Caption').item.json;\nreturn [{\n  json: { caption: p.caption, hashtags: p.hashtags, image_prompt: p.image_prompt, filename: p.filename },\n  binary: { data: { data: inline.data, mimeType: inline.mimeType || inline.mime_type || 'image/png', fileName: p.filename } }\n}];"
+      },
+      "id": "to-binary",
+      "name": "Base64 → Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://GANTI_PROJECT.supabase.co/storage/v1/object/content-images/{{ $json.filename }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "image/png" },
+            { "name": "x-upsert", "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "upload-supabase",
+      "name": "Upload → Supabase Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 0],
+      "credentials": {
+        "httpHeaderAuth": { "id": "supabase-cred", "name": "Supabase Service Role" }
+      },
+      "notes": "Header Auth → Name: Authorization, Value: Bearer <SERVICE_ROLE_KEY>. Ganti GANTI_PROJECT dengan ref project (wbfqudrzwsnlzevxjlkm). Bucket content-images harus sudah dibuat (ai_contents.sql)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Caption').item.json;\nconst PROJECT = 'GANTI_PROJECT';\nconst publicUrl = `https://${PROJECT}.supabase.co/storage/v1/object/public/content-images/${p.filename}`;\nreturn [{ json: {\n  caption: p.caption,\n  hashtags: p.hashtags,\n  image_prompt: p.image_prompt,\n  image_url: publicUrl\n} }];"
+      },
+      "id": "build-final",
+      "name": "Build Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 0],
+      "notes": "Ganti GANTI_PROJECT supaya sama dengan node Upload."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ data: $json }) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond (data)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 0]
+    }
+  ],
+  "connections": {
+    "Webhook /generate-content": { "main": [[{ "node": "Build Input", "type": "main", "index": 0 }]] },
+    "Build Input": { "main": [[{ "node": "Gemini — Caption & Prompt", "type": "main", "index": 0 }]] },
+    "Gemini — Caption & Prompt": { "main": [[{ "node": "Parse Caption", "type": "main", "index": 0 }]] },
+    "Parse Caption": { "main": [[{ "node": "Gemini — Image", "type": "main", "index": 0 }]] },
+    "Gemini — Image": { "main": [[{ "node": "Base64 → Binary", "type": "main", "index": 0 }]] },
+    "Base64 → Binary": { "main": [[{ "node": "Upload → Supabase Storage", "type": "main", "index": 0 }]] },
+    "Upload → Supabase Storage": { "main": [[{ "node": "Build Final", "type": "main", "index": 0 }]] },
+    "Build Final": { "main": [[{ "node": "Respond (data)", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": {},
+  "meta": { "templateCredsSetupCompleted": true }
+}
