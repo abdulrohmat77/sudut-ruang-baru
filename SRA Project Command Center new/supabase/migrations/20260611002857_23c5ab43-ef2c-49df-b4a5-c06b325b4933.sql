@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ALTER COLUMN contract_value TYPE numeric(22,2);

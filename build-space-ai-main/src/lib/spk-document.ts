@@ -133,10 +133,13 @@ export function buildSpkDocumentHtml(v: SpkDocVars, termins: SpkTermin[], embedd
   body { font-family: 'Montserrat', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; font-size: 10.5px; }
   .mono { font-family: 'JetBrains Mono', monospace; }
 
-  .toolbar { position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; justify-content: center; padding: 12px; background: var(--navy); }
-  .toolbar .btn { padding: 9px 20px; border: none; border-radius: 3px; font-family: 'Montserrat', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer; background: var(--sky); color: var(--navy); }
+  .toolbar { position: sticky; top: 0; z-index: 20; display: flex; gap: 12px; align-items: center; padding: 14px 24px; background: var(--navy); }
+  .toolbar .title { flex: 1; font-size: 14px; font-weight: 700; color: var(--ivory); }
+  .toolbar .title .sub { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-left: 12px; }
+  .toolbar .btn { padding: 9px 20px; border: none; border-radius: 6px; font-family: 'Montserrat', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; cursor: pointer; background: var(--sky); color: var(--navy); display: inline-flex; align-items: center; gap: 6px; }
   .toolbar .btn:hover { background: var(--sky-soft); }
   .toolbar .btn.ghost { background: transparent; color: var(--ivory); border: 1px solid rgba(255,255,255,0.3); }
+  .toolbar .btn.ghost:hover { border-color: rgba(255,255,255,0.6); }
 
   .preview-pane { padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
   .page { width: 210mm; min-height: 297mm; background: var(--ivory); padding: 15mm 15mm 12mm; box-shadow: 0 8px 40px rgba(4,54,102,0.18); position: relative; }
@@ -240,7 +243,8 @@ export function buildSpkDocumentHtml(v: SpkDocVars, termins: SpkTermin[], embedd
 </head>
 <body>
   ${embedded ? '' : `<div class="toolbar">
-    <button class="btn" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
+    <div class="title">Preview SPK<span class="sub">${esc(v.NO_SPK)}</span></div>
+    <button class="btn" onclick="window.print()">🖨️ Cetak / PDF</button>
     <button class="btn ghost" onclick="window.close()">Tutup</button>
   </div>`}
 
