@@ -114,15 +114,17 @@ const ArticleGenerator = () => {
     if (!topic.trim() || generating) return
     setGenerating(true); setErr('')
     try {
-      // Upload featured image jika ada
+      // Upload featured image jika ada (ke Cloudinary)
       let imageUrl = ''
       if (file) {
-        const ext = file.name.split('.').pop() || 'jpg'
-        const path = `articles/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-        const { error: upErr } = await supabase.storage.from('uploads').upload(path, file, { contentType: file.type })
-        if (upErr) throw new Error('Upload gambar gagal: ' + upErr.message)
-        const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(path)
-        imageUrl = urlData.publicUrl
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('upload_preset', 'dashboard_uploads')
+        formData.append('folder', 'articles')
+        const cloudRes = await fetch('https://api.cloudinary.com/v1_1/dtfmjwofq/image/upload', { method: 'POST', body: formData })
+        const cloudData = await cloudRes.json()
+        if (!cloudData.secure_url) throw new Error('Upload gambar ke Cloudinary gagal.')
+        imageUrl = cloudData.secure_url
       }
 
       let url = ''
